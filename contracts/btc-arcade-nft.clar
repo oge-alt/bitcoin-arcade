@@ -135,3 +135,81 @@
     true
   )
 )
+
+;; NFT CORE FUNCTIONS
+
+;; Mint a new game NFT
+(define-public (mint-game-nft
+    (name (string-ascii 50))
+    (description (string-ascii 200))
+    (rarity (string-ascii 9))
+    (game-type (string-ascii 50))
+  )
+  (let (
+      (token-id (+ (var-get last-token-id) u1))
+      (is-rarity-valid (is-valid-rarity rarity))
+      (is-game-type-valid (is-valid-game-type game-type))
+    )
+    ;; Ensure only contract owner can mint initially
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    ;; Validate input parameters separately with specific error codes
+    (asserts! (> (len name) u0) ERR-INVALID-PARAMETERS)
+    (asserts! (<= (len name) u50) ERR-INVALID-PARAMETERS)
+    (asserts! (> (len description) u0) ERR-INVALID-PARAMETERS)
+    (asserts! (<= (len description) u200) ERR-INVALID-PARAMETERS)
+    (asserts! is-rarity-valid ERR-INVALID-RARITY)
+    (asserts! is-game-type-valid ERR-INVALID-GAME-TYPE)
+    ;; Mint the NFT
+    (try! (nft-mint? game-asset token-id tx-sender))
+    ;; Store metadata only after all validations have passed
+    (map-set nft-metadata { token-id: token-id } {
+      name: name,
+      description: description,
+      rarity: rarity,
+      game-type: game-type,
+      minted-at: stacks-block-height,
+    })
+    ;; Update last token ID
+    (var-set last-token-id token-id)
+    ;; Return the new token ID
+    (ok token-id)
+  )
+)
+
+;; Transfer an NFT to another owner
+(define-public (transfer
+    (token-id uint)
+    (sender principal)
+    (recipient principal)
+  )
+  (begin
+    ;; Validate recipient
+    (asserts! (not (is-eq sender recipient)) ERR-INVALID-PARAMETERS)
+    (asserts! (not (is-eq recipient (var-get contract-owner)))
+      ERR-INVALID-PARAMETERS
+    )
+    (asserts! (is-valid-principal recipient) ERR-INVALID-PARAMETERS)
+    ;; Ensure sender is the owner
+    (asserts! (is-owner token-id sender) ERR-NOT-AUTHORIZED)
+    ;; Perform transfer
+    (try! (nft-transfer? game-asset token-id sender recipient))
+    (ok true)
+  )
+)
+
+;; READ-ONLY FUNCTIONS
+
+;; Get NFT metadata
+(define-read-only (get-nft-metadata (token-id uint))
+  (map-get? nft-metadata { token-id: token-id })
+)
+
+;; Get current reward pool balance
+(define-read-only (get-reward-pool-balance)
+  (var-get total-reward-pool)
+)
+
+;; Implement NFT trait requirements
+(define-read-only (get-last-token-id)
+  (ok (var-get last-token-id))
+)

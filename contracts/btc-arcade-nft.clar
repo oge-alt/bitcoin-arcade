@@ -74,3 +74,64 @@
     minted-at: uint,
   }
 )
+
+;; Leaderboard tracking
+(define-map player-scores
+  { player: principal }
+  {
+    total-score: uint,
+    last-updated: uint,
+    total-rewards-earned: uint,
+  }
+)
+
+;; NON-FUNGIBLE TOKEN DEFINITION
+
+;; Define the NFT asset
+(define-non-fungible-token game-asset uint)
+
+;; PRIVATE HELPER FUNCTIONS
+
+;; Validate rarity type
+(define-private (is-valid-rarity (rarity (string-ascii 9)))
+  (is-some (index-of VALID-RARITIES rarity))
+)
+
+;; Validate game type
+(define-private (is-valid-game-type (game-type (string-ascii 50)))
+  (and
+    (> (len game-type) u0)
+    (<= (len game-type) u50)
+  )
+)
+
+;; Validate principal (enhanced check)
+(define-private (is-valid-principal (addr principal))
+  (and
+    (not (is-eq addr tx-sender))
+    ;; Add additional principal validation if needed
+    true
+  )
+)
+
+;; Check if a principal is the owner of a specific NFT
+(define-private (is-owner
+    (token-id uint)
+    (user principal)
+  )
+  (match (nft-get-owner? game-asset token-id)
+    owner (is-eq user owner)
+    false
+  )
+)
+
+;; Initialize contract
+(define-private (initialize)
+  (begin
+    ;; Set initial reward per point
+    (var-set reward-per-point u10)
+    ;; Set initial reward pool
+    (var-set total-reward-pool u1000000) ;; 1 million sats initial pool
+    true
+  )
+)

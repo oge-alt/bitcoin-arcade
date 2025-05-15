@@ -298,3 +298,36 @@
     )
   )
 )
+
+;; Add funds to reward pool
+(define-public (add-to-reward-pool (amount uint))
+  (begin
+    ;; Ensure only contract owner can add to pool
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    ;; Validate reward pool addition
+    (asserts! (> amount u0) ERR-INVALID-PARAMETERS)
+    (asserts! (<= amount u1000000000) ERR-INVALID-PARAMETERS) ;; Prevent extremely large additions
+    ;; Update reward pool
+    (var-set total-reward-pool (+ (var-get total-reward-pool) amount))
+    (ok true)
+  )
+)
+
+;; ADMINISTRATIVE FUNCTIONS
+
+;; Transfer contract ownership
+(define-public (transfer-ownership (new-owner principal))
+  (begin
+    ;; Ensure only current owner can transfer
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    ;; Validate new owner principal
+    (asserts! (not (is-eq new-owner tx-sender)) ERR-INVALID-PARAMETERS)
+    (asserts! (is-valid-principal new-owner) ERR-INVALID-PARAMETERS)
+    ;; Update contract owner
+    (var-set contract-owner new-owner)
+    (ok true)
+  )
+)
+
+;; Run initialization on contract deploy
+(initialize)

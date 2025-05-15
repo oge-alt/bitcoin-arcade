@@ -213,3 +213,88 @@
 (define-read-only (get-last-token-id)
   (ok (var-get last-token-id))
 )
+
+(define-read-only (get-token-uri (token-id uint))
+  (ok (some (concat "https://bitcoinarcade.io/assets/" (int-to-ascii token-id))))
+)
+
+(define-read-only (get-owner (token-id uint))
+  (ok (nft-get-owner? game-asset token-id))
+)
+
+;; GAME REWARD SYSTEM FUNCTIONS
+
+;; Validate player exists
+(define-private (player-exists (player principal))
+  (is-some (map-get? player-scores { player: player }))
+)
+
+;; Record player score
+(define-public (record-player-score
+    (player principal)
+    (score uint)
+  )
+  (begin
+    ;; Ensure only contract owner can call this
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    ;; Validate player
+    (asserts! (is-valid-principal player) ERR-INVALID-PLAYER)
+    ;; Validate score
+    (asserts! (> score u0) ERR-INVALID-PARAMETERS)
+    (asserts! (<= score u10000) ERR-INVALID-PARAMETERS) ;; Reasonable score limit
+    ;; After all validations, proceed with the player score update
+    (let (
+        (current-score (default-to {
+          total-score: u0,
+          last-updated: u0,
+          total-rewards-earned: u0,
+        }
+          (map-get? player-scores { player: player })
+        ))
+        (new-total-score (+ (get total-score current-score) score))
+      )
+      ;; Update player scores
+      (map-set player-scores { player: player } {
+        total-score: new-total-score,
+        last-updated: stacks-block-height,
+        total-rewards-earned: (+ (get total-rewards-earned current-score)
+          (* score (var-get reward-per-point))
+        ),
+      })
+      (ok new-total-score)
+    )
+  )
+)
+
+;; Distribute Bitcoin rewards
+(define-public (distribute-bitcoin-rewards (player principal))
+  (begin
+    ;; Ensure only contract owner can distribute
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    ;; Validate player
+    (asserts! (is-valid-principal player) ERR-INVALID-PLAYER)
+    ;; Check if player exists in the system
+    (asserts! (player-exists player) ERR-NFT-NOT-FOUND)
+    ;; After all validations, proceed with reward distribution
+    (let (
+        (player-score (unwrap! (map-get? player-scores { player: player }) ERR-NFT-NOT-FOUND))
+        (total-reward (get total-rewards-earned player-score))
+      )
+      ;; Ensure sufficient reward pool and valid reward amount
+      (asserts! (> total-reward u0) ERR-INSUFFICIENT-FUNDS)
+      (asserts! (>= (var-get total-reward-pool) total-reward)
+        ERR-INSUFFICIENT-FUNDS
+      )
+      ;; Simulate Bitcoin reward transfer 
+      ;; Note: Actual BTC transfer would require additional implementation
+      (var-set total-reward-pool (- (var-get total-reward-pool) total-reward))
+      ;; Reset player rewards after distribution
+      (map-set player-scores { player: player } {
+        total-score: (get total-score player-score),
+        last-updated: stacks-block-height,
+        total-rewards-earned: u0,
+      })
+      (ok total-reward)
+    )
+  )
+)
